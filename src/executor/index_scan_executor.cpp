@@ -1,5 +1,5 @@
 #include "executor/executors/index_scan_executor.h"
-
+#include <algorithm> 
 class RowidCompare {
  public:
   bool operator()(RowId rid1, RowId rid2) { return rid1.Get() < rid2.Get(); }
@@ -57,8 +57,8 @@ vector<RowId> IndexScanExecutor::IndexScan(AbstractExpressionRef predicate) {
         if (lhs.empty()) return rhs;
         if (rhs.empty()) return lhs;
       }
-      sort(lhs.begin(), lhs.end(), RowidCompare());
-      sort(rhs.begin(), rhs.end(), RowidCompare());
+      std::sort(lhs.begin(), lhs.end(), RowidCompare());
+      std::sort(rhs.begin(), rhs.end(), RowidCompare());
       vector<RowId> result;
       set_intersection(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(), back_inserter(result), RowidCompare());
       return result;

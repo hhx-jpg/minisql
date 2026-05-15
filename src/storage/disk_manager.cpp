@@ -47,33 +47,93 @@ void DiskManager::WritePage(page_id_t logical_page_id, const char *page_data) {
   WritePhysicalPage(MapPageId(logical_page_id), page_data);
 }
 
-/**
- * TODO: Student Implement
- */
 page_id_t DiskManager::AllocatePage() {
-  ASSERT(false, "Not implemented yet.");
-  return INVALID_PAGE_ID;
+  auto *meta = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
+
+  // Search existing extents for a free page
+  for (uint32_t i = 0; i < meta->num_extents_; i++) {
+    if (meta->extent_used_page_[i] >= BITMAP_SIZE) continue;
+
+    page_id_t bitmap_phys_id = 1 + i * (1 + BITMAP_SIZE);
+    char bitmap_buf[PAGE_SIZE];
+    ReadPhysicalPage(bitmap_phys_id, bitmap_buf);
+    auto *bitmap = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_buf);
+
+    uint32_t page_offset;
+    if (bitmap->AllocatePage(page_offset)) {
+      WritePhysicalPage(bitmap_phys_id, bitmap_buf);
+      meta->num_allocated_pages_++;
+      meta->extent_used_page_[i]++;
+      return static_cast<page_id_t>(i * BITMAP_SIZE + page_offset);
+    }
+  }
+
+  // No free page in existing extents — create a new extent
+  uint32_t new_extent_idx = meta->num_extents_;
+  page_id_t bitmap_phys_id = 1 + new_extent_idx * (1 + BITMAP_SIZE);
+
+  char bitmap_buf[PAGE_SIZE];
+  memset(bitmap_buf, 0, PAGE_SIZE);
+  auto *bitmap = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_buf);
+
+  uint32_t page_offset;
+  bool success = bitmap->AllocatePage(page_offset);
+  ASSERT(success, "New bitmap page should have free pages.");
+
+  WritePhysicalPage(bitmap_phys_id, bitmap_buf);
+
+  // Initialize the corresponding data page to zero
+  page_id_t data_phys_id = bitmap_phys_id + 1 + page_offset;
+  char data_page[PAGE_SIZE];
+  memset(data_page, 0, PAGE_SIZE);
+  WritePhysicalPage(data_phys_id, data_page);
+
+  meta->num_extents_++;
+  meta->num_allocated_pages_++;
+  meta->extent_used_page_[new_extent_idx] = 1;
+
+  return static_cast<page_id_t>(new_extent_idx * BITMAP_SIZE + page_offset);
 }
 
-/**
- * TODO: Student Implement
- */
 void DiskManager::DeAllocatePage(page_id_t logical_page_id) {
-  ASSERT(false, "Not implemented yet.");
+  auto *meta = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
+  size_t extent_idx = logical_page_id / BITMAP_SIZE;
+  ASSERT(extent_idx < meta->num_extents_, "Cannot deallocate page from non-existent extent.");
+
+  page_id_t bitmap_phys_id = 1 + extent_idx * (1 + BITMAP_SIZE);
+  char bitmap_buf[PAGE_SIZE];
+  ReadPhysicalPage(bitmap_phys_id, bitmap_buf);
+  auto *bitmap = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_buf);
+
+  uint32_t page_offset = logical_page_id % BITMAP_SIZE;
+  bool success = bitmap->DeAllocatePage(page_offset);
+  ASSERT(success, "Page is already free.");
+
+  WritePhysicalPage(bitmap_phys_id, bitmap_buf);
+  meta->num_allocated_pages_--;
+  meta->extent_used_page_[extent_idx]--;
 }
 
-/**
- * TODO: Student Implement
- */
 bool DiskManager::IsPageFree(page_id_t logical_page_id) {
-  return false;
+  auto *meta = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
+  size_t extent_idx = logical_page_id / BITMAP_SIZE;
+  if (extent_idx >= meta->num_extents_) {
+    return true;
+  }
+
+  page_id_t bitmap_phys_id = 1 + extent_idx * (1 + BITMAP_SIZE);
+  char bitmap_buf[PAGE_SIZE];
+  ReadPhysicalPage(bitmap_phys_id, bitmap_buf);
+  auto *bitmap = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_buf);
+
+  return bitmap->IsPageFree(logical_page_id % BITMAP_SIZE);
 }
 
-/**
- * TODO: Student Implement
- */
 page_id_t DiskManager::MapPageId(page_id_t logical_page_id) {
-  return 0;
+  size_t extent_idx = logical_page_id / BITMAP_SIZE;
+  size_t offset_in_extent = logical_page_id % BITMAP_SIZE;
+  // physical layout: Meta | Bitmap0 | Page0..Page{N-1} | Bitmap1 | PageN..Page{2N-1} | ...
+  return 2 + extent_idx * (1 + BITMAP_SIZE) + offset_in_extent;
 }
 
 int DiskManager::GetFileSize(const std::string &file_name) {
