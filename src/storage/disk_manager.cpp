@@ -64,6 +64,7 @@ page_id_t DiskManager::AllocatePage() {
       WritePhysicalPage(bitmap_phys_id, bitmap_buf);
       meta->num_allocated_pages_++;
       meta->extent_used_page_[i]++;
+      WritePhysicalPage(META_PAGE_ID, meta_data_);
       return static_cast<page_id_t>(i * BITMAP_SIZE + page_offset);
     }
   }
@@ -91,6 +92,7 @@ page_id_t DiskManager::AllocatePage() {
   meta->num_extents_++;
   meta->num_allocated_pages_++;
   meta->extent_used_page_[new_extent_idx] = 1;
+  WritePhysicalPage(META_PAGE_ID, meta_data_);
 
   return static_cast<page_id_t>(new_extent_idx * BITMAP_SIZE + page_offset);
 }
@@ -112,6 +114,7 @@ void DiskManager::DeAllocatePage(page_id_t logical_page_id) {
   WritePhysicalPage(bitmap_phys_id, bitmap_buf);
   meta->num_allocated_pages_--;
   meta->extent_used_page_[extent_idx]--;
+  WritePhysicalPage(META_PAGE_ID, meta_data_);
 }
 
 bool DiskManager::IsPageFree(page_id_t logical_page_id) {

@@ -5,4 +5,8 @@ datas/
 .vscode/
 .idea/
 cmake-build-debug/
-cmake-build-release/
+cmake-build-release/*.db
+databases/
+syntax_tree_*.txt
+tree_*.txt
+output.txt

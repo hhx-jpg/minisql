@@ -22,56 +22,162 @@ BufferPoolManager::~BufferPoolManager() {
   delete replacer_;
 }
 
-/**
- * TODO: Student Implement
- */
 Page *BufferPoolManager::FetchPage(page_id_t page_id) {
-  // 1.     Search the page table for the requested page (P).
-  // 1.1    If P exists, pin it and return it immediately.
-  // 1.2    If P does not exist, find a replacement page (R) from either the free list or the replacer.
-  //        Note that pages are always found from the free list first.
-  // 2.     If R is dirty, write it back to the disk.
-  // 3.     Delete R from the page table and insert P.
-  // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
-  return nullptr;
+  lock_guard<recursive_mutex> lock(latch_);
+
+  // 1. Search the page table for the requested page.
+  auto it = page_table_.find(page_id);
+  if (it != page_table_.end()) {
+    frame_id_t frame_id = it->second;
+    Page *page = &pages_[frame_id];
+    page->pin_count_++;
+    replacer_->Pin(frame_id);
+    return page;
+  }
+
+  // 1.2 Page not in memory — find a replacement frame.
+  frame_id_t frame_id;
+  if (!free_list_.empty()) {
+    frame_id = free_list_.front();
+    free_list_.pop_front();
+  } else if (!replacer_->Victim(&frame_id)) {
+    return nullptr;
+  }
+
+  Page *page = &pages_[frame_id];
+
+  // 2. If the replacement page is dirty, write it back to disk.
+  if (page->IsDirty()) {
+    disk_manager_->WritePage(page->page_id_, page->data_);
+  }
+
+  // 3. Delete old page from page table and insert new mapping.
+  if (page->page_id_ != INVALID_PAGE_ID) {
+    page_table_.erase(page->page_id_);
+  }
+  page_table_[page_id] = frame_id;
+
+  // 4. Update metadata, read page content from disk.
+  page->page_id_ = page_id;
+  page->pin_count_ = 1;
+  page->is_dirty_ = false;
+  disk_manager_->ReadPage(page_id, page->data_);
+
+  return page;
 }
 
-/**
- * TODO: Student Implement
- */
 Page *BufferPoolManager::NewPage(page_id_t &page_id) {
-  // 0.   Make sure you call AllocatePage!
-  // 1.   If all the pages in the buffer pool are pinned, return nullptr.
-  // 2.   Pick a victim page P from either the free list or the replacer. Always pick from the free list first.
-  // 3.   Update P's metadata, zero out memory and add P to the page table.
-  // 4.   Set the page ID output parameter. Return a pointer to P.
-  return nullptr;
+  lock_guard<recursive_mutex> lock(latch_);
+
+  // 0. Pick a victim frame: free list first, then replacer.
+  frame_id_t frame_id;
+  if (!free_list_.empty()) {
+    frame_id = free_list_.front();
+    free_list_.pop_front();
+  } else if (!replacer_->Victim(&frame_id)) {
+    // All pages are pinned.
+    return nullptr;
+  }
+
+  // 1. Allocate a new page id on disk.
+  page_id = AllocatePage();
+
+  Page *page = &pages_[frame_id];
+
+  // Write back dirty page before replacing.
+  if (page->IsDirty()) {
+    disk_manager_->WritePage(page->page_id_, page->data_);
+  }
+
+  // Remove old mapping.
+  if (page->page_id_ != INVALID_PAGE_ID) {
+    page_table_.erase(page->page_id_);
+  }
+
+  // 3. Reset metadata, zero out memory, add to page table.
+  page->page_id_ = page_id;
+  page->pin_count_ = 1;
+  page->is_dirty_ = false;
+  page->ResetMemory();
+  page_table_[page_id] = frame_id;
+
+  return page;
 }
 
-/**
- * TODO: Student Implement
- */
 bool BufferPoolManager::DeletePage(page_id_t page_id) {
-  // 0.   Make sure you call DeallocatePage!
-  // 1.   Search the page table for the requested page (P).
-  // 1.   If P does not exist, return true.
-  // 2.   If P exists, but has a non-zero pin-count, return false. Someone is using the page.
-  // 3.   Otherwise, P can be deleted. Remove P from the page table, reset its metadata and return it to the free list.
-  return false;
+  lock_guard<recursive_mutex> lock(latch_);
+
+  // 0. Deallocate on disk.
+  DeallocatePage(page_id);
+
+  // 1. Search the page table.
+  auto it = page_table_.find(page_id);
+  if (it == page_table_.end()) {
+    return true;
+  }
+
+  frame_id_t frame_id = it->second;
+  Page *page = &pages_[frame_id];
+
+  // 2. If pin_count > 0, someone is using the page.
+  if (page->pin_count_ > 0) {
+    return false;
+  }
+
+  // 3. Remove from page table and replacer, reset metadata, return to free list.
+  replacer_->Pin(frame_id);
+  page_table_.erase(it);
+  page->page_id_ = INVALID_PAGE_ID;
+  page->pin_count_ = 0;
+  page->is_dirty_ = false;
+  page->ResetMemory();
+  free_list_.push_back(frame_id);
+
+  return true;
 }
 
-/**
- * TODO: Student Implement
- */
 bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
-  return false;
+  lock_guard<recursive_mutex> lock(latch_);
+
+  auto it = page_table_.find(page_id);
+  if (it == page_table_.end()) {
+    return false;
+  }
+
+  frame_id_t frame_id = it->second;
+  Page *page = &pages_[frame_id];
+
+  if (page->pin_count_ <= 0) {
+    return false;
+  }
+
+  page->pin_count_--;
+  if (is_dirty) {
+    page->is_dirty_ = true;
+  }
+
+  if (page->pin_count_ == 0) {
+    replacer_->Unpin(frame_id);
+  }
+
+  return true;
 }
 
-/**
- * TODO: Student Implement
- */
 bool BufferPoolManager::FlushPage(page_id_t page_id) {
-  return false;
+  lock_guard<recursive_mutex> lock(latch_);
+
+  auto it = page_table_.find(page_id);
+  if (it == page_table_.end()) {
+    return false;
+  }
+
+  Page *page = &pages_[it->second];
+  if (page->IsDirty()) {
+    disk_manager_->WritePage(page_id, page->data_);
+    page->is_dirty_ = false;
+  }
+
+  return true;
 }
 
 page_id_t BufferPoolManager::AllocatePage() {
@@ -85,6 +191,15 @@ void BufferPoolManager::DeallocatePage(__attribute__((unused)) page_id_t page_id
 
 bool BufferPoolManager::IsPageFree(page_id_t page_id) {
   return disk_manager_->IsPageFree(page_id);
+}
+
+frame_id_t BufferPoolManager::TryToFindFreePage() {
+  for (size_t i = 0; i < pool_size_; i++) {
+    if (pages_[i].pin_count_ == 0) {
+      return static_cast<frame_id_t>(i);
+    }
+  }
+  return INVALID_FRAME_ID;
 }
 
 // Only used for debug

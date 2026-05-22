@@ -113,8 +113,14 @@ class TableHeap {
         schema_(schema),
         log_manager_(log_manager),
         lock_manager_(lock_manager) {
-    ASSERT(false, "Not implemented yet.");
-  };
+    page_id_t page_id;
+    auto *page = buffer_pool_manager_->NewPage(page_id);
+    ASSERT(page != nullptr, "Failed to allocate first page for table heap.");
+    auto *table_page = reinterpret_cast<TablePage *>(page->GetData());
+    table_page->Init(page_id, INVALID_PAGE_ID, log_manager_, txn);
+    first_page_id_ = page_id;
+    buffer_pool_manager_->UnpinPage(page_id, true);
+  }
 
   explicit TableHeap(BufferPoolManager *buffer_pool_manager, page_id_t first_page_id, Schema *schema,
                      LogManager *log_manager, LockManager *lock_manager)

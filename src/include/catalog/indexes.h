@@ -67,7 +67,20 @@ class IndexInfo {
     // Step1: init index metadata and table info
     // Step2: mapping index key to key schema
     // Step3: call CreateIndex to create the index
-    ASSERT(false, "Not Implemented yet.");
+    meta_data_ = meta_data;
+    auto *table_schema = table_info->GetSchema();
+    const auto &key_map = meta_data_->GetKeyMapping();
+    std::vector<Column *> key_cols;
+    for (auto col_idx : key_map) {
+      auto *col = table_schema->GetColumn(col_idx);
+      if (col->GetType() == TypeId::kTypeChar) {
+        key_cols.emplace_back(new Column(col->GetName(), col->GetType(), col->GetLength(), col_idx, false, col->IsUnique()));
+      } else {
+        key_cols.emplace_back(new Column(col->GetName(), col->GetType(), col_idx, false, col->IsUnique()));
+      }
+    }
+    key_schema_ = new Schema(key_cols);
+    index_ = CreateIndex(buffer_pool_manager, "bptree");
   }
 
   inline Index *GetIndex() { return index_; }

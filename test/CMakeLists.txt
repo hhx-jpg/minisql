@@ -1,7 +1,11 @@
 FILE(GLOB_RECURSE MINISQL_TEST_SOURCES ${PROJECT_SOURCE_DIR}/test/*/*test.cpp)
 
+# Exclude lock_manager_test from the combined minisql_test target
+SET(MINISQL_COMBINED_TEST_SOURCES ${MINISQL_TEST_SOURCES})
+LIST(FILTER MINISQL_COMBINED_TEST_SOURCES EXCLUDE REGEX "lock_manager_test\\.cpp$")
+
 SET(TEST_MAIN_PATH ${PROJECT_SOURCE_DIR}/test/main_test.cpp)
-ADD_EXECUTABLE(minisql_test ${MINISQL_TEST_SOURCES} ${TEST_MAIN_PATH})
+ADD_EXECUTABLE(minisql_test ${MINISQL_COMBINED_TEST_SOURCES} ${TEST_MAIN_PATH})
 ADD_LIBRARY(minisql_test_main ${TEST_MAIN_PATH})
 TARGET_LINK_LIBRARIES(minisql_test_main glog gtest)
 TARGET_LINK_LIBRARIES(minisql_test zSql glog gtest)

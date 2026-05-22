@@ -19,16 +19,29 @@ void InitGoogleLog(char *argv) {
   // LOG(INFO) << "glog started!";
 }
 
-void InputCommand(char *input, const int len) {
+bool InputCommand(char *input, const int len) {
   memset(input, 0, len);
   printf("minisql > ");
+  fflush(stdout);
   int i = 0;
-  char ch;
+  int ch;
   while ((ch = getchar()) != ';') {
-    input[i++] = ch;
+    if (ch == EOF) {
+      return false;
+    }
+    if (ch == 127 || ch == '\b') {  // backspace / delete
+      if (i > 0) {
+        i--;
+        printf("\b \b");
+        fflush(stdout);
+      }
+    } else if (i < len - 1) {
+      input[i++] = ch;
+    }
   }
   input[i] = ch;  // ;
   getchar();      // remove enter
+  return true;
 }
 
 int main(int argc, char **argv) {
@@ -44,7 +57,7 @@ int main(int argc, char **argv) {
 
   while (1) {
     // read from buffer
-    InputCommand(cmd, buf_size);
+    if (!InputCommand(cmd, buf_size)) break;  // EOF
     // create buffer for sql input
     YY_BUFFER_STATE bp = yy_scan_string(cmd);
     if (bp == nullptr) {

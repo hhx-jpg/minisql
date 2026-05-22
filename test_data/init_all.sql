@@ -1,0 +1,14 @@
+create database testdb;
+use testdb;
+create table account (id int unique, name char(64), balance float);
+execfile "test_data/account00.txt";
+execfile "test_data/account01.txt";
+execfile "test_data/account02.txt";
+execfile "test_data/account03.txt";
+execfile "test_data/account04.txt";
+execfile "test_data/account05.txt";
+execfile "test_data/account06.txt";
+execfile "test_data/account07.txt";
+execfile "test_data/account08.txt";
+execfile "test_data/account09.txt";
+select * from account;

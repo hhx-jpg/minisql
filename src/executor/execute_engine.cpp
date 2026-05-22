@@ -3,6 +3,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include <chrono>
 
@@ -33,9 +34,9 @@ ExecuteEngine::ExecuteEngine() {
   }
  
   struct dirent *stdir;
-  while((stdir = readdir(dir)) != nullptr) {
-    if( strcmp( stdir->d_name , "." ) == 0 ||
-        strcmp( stdir->d_name , "..") == 0 ||
+  while ((stdir = readdir(dir)) != nullptr) {
+    if (strcmp(stdir->d_name, ".") == 0 ||
+        strcmp(stdir->d_name, "..") == 0 ||
         stdir->d_name[0] == '.')
       continue;
     dbs_[stdir->d_name] = new DBStorageEngine(stdir->d_name, false);
@@ -252,7 +253,9 @@ dberr_t ExecuteEngine::ExecuteCreateDatabase(pSyntaxNode ast, ExecuteContext *co
   if (dbs_.find(db_name) != dbs_.end()) {
     return DB_ALREADY_EXIST;
   }
-  dbs_.insert(make_pair(db_name, new DBStorageEngine(db_name, true)));
+  // Check if the database file already exists on disk
+  bool exists_on_disk = (access(("./databases/" + db_name).c_str(), F_OK) == 0);
+  dbs_.insert(make_pair(db_name, new DBStorageEngine(db_name, !exists_on_disk)));
   return DB_SUCCESS;
 }
 

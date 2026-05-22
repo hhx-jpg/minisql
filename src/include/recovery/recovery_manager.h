@@ -22,20 +22,11 @@ struct CheckPoint {
 
 class RecoveryManager {
 public:
-    /**
-    * TODO: Student Implement
-    */
-    void Init(CheckPoint &last_checkpoint) {}
+    void Init(CheckPoint &last_checkpoint);
 
-    /**
-    * TODO: Student Implement
-    */
-    void RedoPhase() {}
+    void RedoPhase();
 
-    /**
-    * TODO: Student Implement
-    */
-    void UndoPhase() {}
+    void UndoPhase();
 
     // used for test only
     void AppendLogRec(LogRecPtr log_rec) { log_recs_.emplace(log_rec->lsn_, log_rec); }

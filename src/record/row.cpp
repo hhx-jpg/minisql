@@ -1,27 +1,40 @@
 #include "record/row.h"
 
-/**
- * TODO: Student Implement
- */
 uint32_t Row::SerializeTo(char *buf, Schema *schema) const {
   ASSERT(schema != nullptr, "Invalid schema before serialize.");
   ASSERT(schema->GetColumnCount() == fields_.size(), "Fields size do not match schema's column size.");
-  // replace with your code here
-  return 0;
+  uint32_t offset = 0;
+  for (size_t i = 0; i < fields_.size(); i++) {
+    offset += fields_[i]->SerializeTo(buf + offset);
+  }
+  return offset;
 }
 
 uint32_t Row::DeserializeFrom(char *buf, Schema *schema) {
   ASSERT(schema != nullptr, "Invalid schema before serialize.");
-  ASSERT(fields_.empty(), "Non empty field in row.");
-  // replace with your code here
-  return 0;
+  // Clear existing fields before deserializing
+  for (auto *field : fields_) {
+    delete field;
+  }
+  fields_.clear();
+  uint32_t offset = 0;
+  auto columns = schema->GetColumns();
+  for (size_t i = 0; i < columns.size(); i++) {
+    Field *field = nullptr;
+    offset += Field::DeserializeFrom(buf + offset, columns[i]->GetType(), &field, false);
+    fields_.push_back(field);
+  }
+  return offset;
 }
 
 uint32_t Row::GetSerializedSize(Schema *schema) const {
   ASSERT(schema != nullptr, "Invalid schema before serialize.");
   ASSERT(schema->GetColumnCount() == fields_.size(), "Fields size do not match schema's column size.");
-  // replace with your code here
-  return 0;
+  uint32_t size = 0;
+  for (auto *field : fields_) {
+    size += field->GetSerializedSize();
+  }
+  return size;
 }
 
 void Row::GetKeyFromRow(const Schema *schema, const Schema *key_schema, Row &key_row) {

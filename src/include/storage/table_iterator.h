@@ -31,7 +31,10 @@ public:
   TableIterator operator++(int);
 
 private:
-  // add your own private member variables here
+  TableHeap *table_heap_{nullptr};
+  RowId cur_rid_;
+  Row row_;
+  Txn *txn_{nullptr};
 };
 
 #endif  // MINISQL_TABLE_ITERATOR_H
